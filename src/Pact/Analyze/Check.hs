@@ -103,14 +103,14 @@ data SmtFailure
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
   | SortMismatch String
-  | UnexpectedFailure SBV.SMTException
+  | UnexpectedFailure SBV.SBVException
   deriving Show
 
 instance Eq SmtFailure where
   Invalid m1    == Invalid m2    = m1 == m2
   Unsatisfiable == Unsatisfiable = True
 
-  -- SMTReasonUnknown and SMTException don't provide instances of Eq, so we
+  -- SMTReasonUnknown and SBVException don't provide instances of Eq, so we
   -- always return 'False' in these cases.
   _             ==             _ = False
 
@@ -312,13 +312,13 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
     goal = Validation
 
     config :: SBV.SMTConfig
-    config = SBV.z3
+    config = SBV.z3 {SBVI.verbose = True}
 
-    -- Discharges impure 'SMTException's from sbv.
+    -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
-    catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
+    catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
@@ -363,13 +363,13 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
     goal = checkGoal check
 
     config :: SBV.SMTConfig
-    config = SBV.z3
+    config = SBV.z3 {SBVI.verbose = True}
 
-    -- Discharges impure 'SMTException's from sbv.
+    -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
-    catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
+    catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ smtToCheckFailure propInfo $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a

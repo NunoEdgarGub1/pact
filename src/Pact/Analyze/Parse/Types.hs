@@ -39,6 +39,7 @@ data PreProp
   | PreDecimalLit Decimal
   | PreTimeLit    Time
   | PreBoolLit    Bool
+  | PreListLit    [PreProp]
 
   -- identifiers
   | PreAbort
@@ -65,6 +66,8 @@ instance UserShow PreProp where
     PreDecimalLit d -> userShow d
     PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
     PreBoolLit b    -> tShow (Pact.LBool b)
+    PreListLit list ->
+      "[" <> T.intercalate ", " (fmap (userShowsPrec 0) list) <> "]"
 
     PreAbort        -> STransactionAborts
     PreSuccess      -> STransactionSucceeds
@@ -81,7 +84,7 @@ instance UserShow PreProp where
     PreApp name applicands ->
       "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
-      "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
+      "(" <> SProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
     PreLiteralObject obj ->
       userShowsPrec prec obj
 
