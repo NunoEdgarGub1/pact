@@ -229,7 +229,8 @@ instance
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    At _schema k obj _ty     -> parenList [userShow k, userShow obj]
+    ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
+    -- ListAt k obj             -> parenList [userShow k, userShow obj]
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
 
