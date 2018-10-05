@@ -22,7 +22,7 @@ import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
 import           Control.Monad        (when, (>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
-import           Data.SBV             (SBV, SymWord, Symbolic)
+import           Data.SBV             (SBV, SymWord, Symbolic, newArray_, SArray)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
@@ -42,6 +42,9 @@ allocSchema (Schema fieldTys) = Object <$>
 allocAVal :: EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
+  EListType (_ :: Type t) -> mkAList
+    <$> (alloc :: Symbolic (SBV Integer))
+    <*> (newArray_ :: Symbolic (SArray Integer t))
   EType (_ :: Type t) -> mkAVal . sansProv <$>
     (alloc :: Symbolic (SBV t))
 

@@ -11,7 +11,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite)
+                                              SymWord, ite, literal)
 import qualified Data.SBV.String             as SBVS
 -- import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
@@ -150,22 +150,10 @@ evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =
   error "literal object can't be an argument to evalCore"
-evalCore (LiteralList xs)                  = undefined
-  -- sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
 evalCore (StringContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack
   pure $ sansProv $ _sSbv needle' `SBVS.isInfixOf` _sSbv haystack'
--- evalCore (ListDrop n list) = do
---   n'    <- eval n
---   list' <- eval list
---   pure $ sansProv $ _sSbv n' `SBVL.drop` _sSbv list'
-evalCore ListReverse{} = undefined
-evalCore ListSort{} = undefined
--- evalCore (ListTake n list) = do
---   n'    <- eval n
---   list' <- eval list
---   pure $ sansProv $ _sSbv n' `SBVL.take` _sSbv list'
 evalCore (ListEqNeq op (ESimple tyA a) (ESimple tyB b)) =
   case typeEq tyA tyB of
     Nothing   -> error "TODO"
@@ -178,6 +166,24 @@ evalCore (Var vid name) = do
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
+
+evalCoreL
+  :: (Analyzer m, SymWord a)
+  => Core (TermOf m) [a] -> m (SList a)
+evalCoreL (LiteralList xs) = do
+  vals <- traverse (fmap _sSbv . eval) xs
+  pure $ SList (fromIntegral (length xs)) vals
+  -- sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
+-- evalCoreL (ListDrop n list) = do
+--   n'    <- eval n
+--   list' <- eval list
+--   pure $ sansProv $ _sSbv n' `SBVL.drop` _sSbv list'
+evalCoreL ListReverse{} = undefined
+evalCoreL ListSort{} = undefined
+-- evalCoreL (ListTake n list) = do
+--   n'    <- eval n
+--   list' <- eval list
+--   pure $ sansProv $ _sSbv n' `SBVL.take` _sSbv list'
 
 evalObjAt
   :: (Analyzer m, SymWord a)
@@ -274,6 +280,9 @@ evalExistential = \case
   ESimple ty prop -> do
     prop' <- eval prop
     pure (EType ty, mkAVal prop')
+  EList ty prop -> do
+    SList len prop' <- evalL prop
+    pure (EListType ty, mkAList len prop')
   EObject ty prop -> do
     prop' <- evalO prop
     pure (EObjectTy ty, AnObj prop')

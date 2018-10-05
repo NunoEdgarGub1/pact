@@ -41,9 +41,10 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (%), (.<), (.==))
+                                               (%), (.<), (.==), SArray)
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
+import qualified Data.SBV.Dynamic             as SBVD
 import qualified Data.SBV.String              as SBV
 import           Data.Semigroup               ((<>))
 import qualified Data.Set                     as Set
@@ -100,6 +101,7 @@ mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
+existentialType (EList   ety _) = EListType ety
 existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
@@ -450,9 +452,20 @@ varIdArgs args =
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
+  | AList SBVI.SVal SBVD.SArr
   | AnObj Object
   | OpaqueVal
-  deriving (Eq, Show)
+
+data SList a = SList (SBV Integer) (SArray Integer a)
+
+mkAList :: SBV Integer -> SArray Integer a -> AVal
+mkAList (SBVI.SBV len) (SBVI.SArray arr) = AList len arr
+
+instance Eq AVal where
+  _ == _ = False -- TODO
+
+instance Show AVal where
+  show _ = "TODO: Show AVal"
 
 instance UserShow AVal where
   userShowsPrec _ = \case
@@ -560,11 +573,13 @@ type QType = Quantifiable 'QAny
 coerceQType :: EType -> QType
 coerceQType = \case
   EType ty         -> EType ty
+  EListType ty     -> EListType ty
   EObjectTy schema -> EObjectTy schema
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
   EType ty         -> Just $ EType ty
+  EListType ty     -> Just $ EListType ty
   EObjectTy schema -> Just $ EObjectTy schema
   _                -> Nothing
 
@@ -701,6 +716,7 @@ instance Mergeable a => Mergeable (TableMap a) where
 instance UserShow (Quantifiable q) where
   userShowsPrec d = \case
     EType ty     -> userShowsPrec d ty
+    EListType ty -> brackets $ userShowsPrec 0 ty
     EObjectTy ty -> userShowsPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"

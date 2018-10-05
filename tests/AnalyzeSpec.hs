@@ -226,20 +226,20 @@ spec = describe "analyze" $ do
   --   it "floor" $ floorD @Decimal 1.5    == 1
   --   it "floor" $ floorD @Decimal (-1.5) == -2
 
---   describe "decimal division" $ do
---     let unlit = fromJust . unliteralS @Decimal
+  -- describe "decimal division" $ do
+  --   let unlit = fromJust . unliteralS @Decimal
 
---     it "can be one half" $ unlit (1 / 2) == 0.5
---     it "handles the last decimal correctly" $
---       unlit (1581138830084.1918464 / 1581138830084)
---       ==
---       1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
+  --   it "can be one half" $ unlit (1 / 2) == 0.5
+  --   it "handles the last decimal correctly" $
+  --     unlit (1581138830084.1918464 / 1581138830084)
+  --     ==
+  --     1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
 
---   describe "banker's method" $ do
---     let unlit = fromJust . unliteralS
+  -- describe "banker's method" $ do
+  --   let unlit = fromJust . unliteralS
 
---     it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
---     it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
+  --   it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
+  --   it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
 
   describe "result" $ do
     let code =
@@ -2142,6 +2142,7 @@ spec = describe "analyze" $ do
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
+-}
 
     let code' model = [text|
           (defun test:[integer] ()
@@ -2150,4 +2151,3 @@ spec = describe "analyze" $ do
           |]
     expectVerified  $ code' "(property (= result [1 2 3]))"
     expectFalsified $ code' "(property (= result [1 2]))"
--}

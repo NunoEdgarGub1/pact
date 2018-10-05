@@ -54,6 +54,7 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+import Debug.Trace
 
 -- * Translation types
 
@@ -350,7 +351,7 @@ maybeTranslateType
 -- A helper to translate types that doesn't know how to handle user types
 -- itself
 maybeTranslateType'
-  :: (Monad f, Alternative f)
+  :: (Monad f, Alternative f, Show a, Show (f QType))
   => (a -> f QType)
   -> Pact.Type a
   -> f QType
@@ -379,9 +380,15 @@ maybeTranslateType' f = \case
   -- TODO: handle these:
   --
   TyPrim TyValue   -> empty
-  TyList a         -> maybeTranslateType' f a >>= \case
-    EType t -> pure $ EListType t
-    _       -> empty
+  TyList a         -> do
+    t <- maybeTranslateType' f a
+    traceM $ "t: " ++ show t
+    case t of
+      EType t -> trace "here1" $ pure $ EListType t
+      _       -> trace "here2" empty
+   -- traceShowId (maybeTranslateType' f (traceShowId a)) >>= \case
+   --  EType t -> pure $ EListType (trace ("t: " ++ show t) t)
+   --  _       -> traceM "here2" >> empty
   TyFun _          -> empty
 
 throwError'
@@ -961,9 +968,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_List _node elems -> do
     elems' <- traverse translateNode elems
-    ESimple listTy litList
+    EList listOfTy litList
       <- maybe (throwError' BadList) pure $ doit elems'
-    pure $ ESimple listTy $ CoreTerm litList
+    pure $ EList listOfTy $ CoreTerm litList
 
   AST_Contains node val collection -> do
     ty          <- translateType node
@@ -1030,9 +1037,9 @@ doit (ESimple ty1 x : xs) = foldr
     ESimple ty y -> \case
       Nothing -> Nothing
       Just EObject{} -> error "impossible"
-      Just (ESimple listTy@(TList ty') (LiteralList ys)) -> case typeEq ty ty' of
+      Just (EList  ty' (LiteralList ys)) -> case typeEq ty ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (ESimple listTy (LiteralList (y:ys)))
+        Just Refl -> Just (EList ty' (LiteralList (y:ys)))
       _ -> error "impossible")
   (Just (EList ty1 (LiteralList [x])))
   xs

@@ -229,6 +229,7 @@ inferVar vid name prop = do
   case varTy of
     Nothing -> throwErrorT $ "couldn't find property variable " <> name
     Just (EType varTy')     -> pure (ESimple varTy' prop)
+    Just (EListType varTy') -> pure (EList varTy' prop)
     Just (EObjectTy schema) -> pure (EObject schema prop)
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
@@ -273,10 +274,10 @@ inferPreProp preProp = case preProp of
 
   PreListLit as   -> do
     as' <- traverse inferPreProp as
-    ESimple listTy litList
+    EList listTy litList
       <- maybe (throwErrorT "TODO: bad list") pure $ doit as'
 
-    pure $ ESimple listTy $ CoreProp litList
+    pure $ EList listTy $ CoreProp litList
 
   -- identifiers
   PreResult       -> inferVar 0 SFunctionResult (PropSpecific Result)
@@ -377,13 +378,19 @@ inferPreProp preProp = case preProp of
           TKeySet  -> case toOp eqNeqP op' of
             Just eqNeq -> pure $ ESimple TBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
-          TList ty -> case toOp eqNeqP op' of
-            Just eqNeq
-              -> pure $ ESimple TBool $ CoreProp $ ListEqNeq eqNeq (ESimple aTy aProp) (ESimple aTy bProp)
-            Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
+          -- TList ty -> case toOp eqNeqP op' of
+          --   Just eqNeq
+          --     -> pure $ ESimple TBool $ CoreProp $ ListEqNeq eqNeq (ESimple aTy aProp) (ESimple aTy bProp)
+          --   Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
+      (EList aTy aProp, EList bTy bProp) -> case toOp eqNeqP op' of
+        Just eqNeq -> case typeEq aTy bTy of
+          Just Refl -> pure $ ESimple TBool $ CoreProp $
+            ListEqNeq eqNeq (EList aTy aProp) (EList aTy bProp)
+          Nothing -> typeError preProp aTy bTy
+        Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
       (EObject _ aProp, EObject _ bProp) -> case toOp eqNeqP op' of
-          Just eqNeq -> pure $ ESimple TBool $ CoreProp $ ObjectEqNeq eqNeq aProp bProp
-          Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
+        Just eqNeq -> pure $ ESimple TBool $ CoreProp $ ObjectEqNeq eqNeq aProp bProp
+        Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
       (_, _) -> throwErrorIn preProp $
         "can't compare primitive types with objects (found " <>
         userShow (existentialType a') <> " and " <>

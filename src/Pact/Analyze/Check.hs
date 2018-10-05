@@ -312,7 +312,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
     goal = Validation
 
     config :: SBV.SMTConfig
-    config = SBV.z3 {SBVI.verbose = True}
+    config = SBV.z3 -- {SBVI.verbose = True}
 
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
@@ -363,7 +363,7 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
     goal = checkGoal check
 
     config :: SBV.SMTConfig
-    config = SBV.z3 {SBVI.verbose = True}
+    config = SBV.z3 -- {SBVI.verbose = True}
 
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
