@@ -109,7 +109,7 @@ evalPropO (CoreProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 
 
-evalPropSpecific :: SymWord a => PropSpecific a -> Query (S a)
+evalPropSpecific :: PropSpecific a -> Query (S a)
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
