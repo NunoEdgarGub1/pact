@@ -145,7 +145,8 @@ evalCore (BoolComparison op x y)           = evalComparisonOp op x y
 evalCore (ObjectEqNeq op x y)              = evalObjectEqNeq  op x y
 evalCore (KeySetEqNeq      op x y)         = evalEqNeq        op x y
 evalCore (Logical op props)                = evalLogicalOp op props
-evalCore (ObjAt schema colNameT objT retType) = evalObjAt schema colNameT objT retType
+evalCore (ObjAt schema colNameT objT retType)
+  = evalObjAt schema colNameT objT retType
 evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =

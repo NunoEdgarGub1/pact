@@ -181,24 +181,37 @@ data Core t a where
   -- ListMap ::
   -- MkList ?
   -- MakeList :: t a -> t Integer -> Core t [a]
-  ListReverse :: t [a] -> Core t [a]
-  ListSort    :: t [a] -> Core t [a]
-  ListTake    :: t Integer -> t [a] -> Core t [a]
+  -- ListReverse :: t [a] -> Core t [a]
+  -- ListSort    :: t [a] -> Core t [a]
+  -- ListTake    :: t Integer -> t [a] -> Core t [a]
+
   ObjTake     :: Schema -> t [String] -> t Object -> Core t Object
-  ListConcat  :: t [a] -> t [a] -> Core t [a]
+
+  -- ListConcat  :: t [a] -> t [a] -> Core t [a]
 
   ObjectMerge :: t Object -> t Object -> Core t Object
 
   LiteralObject :: Map Text (Existential t) -> Core t Object
 
-  LiteralList   :: forall a t. SimpleType a => [t a] -> Core t [a]
+  -- LiteralList   :: forall a t. SimpleType a => [t a] -> Core t [a]
+
+  ListInfo :: ListInfo t [a] -> Core t [a]
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t Bool] -> Core t Bool
 
-deriving instance Eq a   => Eq   (Core Prop a)
+-- deriving instance Eq a   => Eq   (Core Prop a)
+deriving instance Eq a => Eq (Core Prop [a])
+deriving instance         Eq (Core Prop Object)
+deriving instance         Eq (Core Prop Integer)
+deriving instance         Eq (Core Prop Bool)
+deriving instance         Eq (Core Prop String)
+deriving instance         Eq (Core Prop Time)
+deriving instance         Eq (Core Prop Decimal)
+deriving instance         Eq (Core Prop KeySet)
+deriving instance         Eq (Core Prop Any)
 deriving instance Show a => Show (Core Prop a)
 
 instance
@@ -317,7 +330,17 @@ deriving instance Show a => Show (PropSpecific a)
 data Prop a
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
-  deriving (Show, Eq)
+  deriving (Show)
+
+deriving instance Eq a => Eq (Prop [a])
+deriving instance         Eq (Prop Object)
+deriving instance         Eq (Prop Integer)
+deriving instance         Eq (Prop Bool)
+deriving instance         Eq (Prop String)
+deriving instance         Eq (Prop Time)
+deriving instance         Eq (Prop Decimal)
+deriving instance         Eq (Prop KeySet)
+deriving instance         Eq (Prop Any)
 
 instance UserShow a => UserShow (PropSpecific a) where
   userShowsPrec _d = \case

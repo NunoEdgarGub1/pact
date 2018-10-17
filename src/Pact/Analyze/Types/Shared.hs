@@ -64,6 +64,32 @@ import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.UserShow
 
 
+data Fold a where
+  AndFold :: Fold Bool
+  AddFold :: Fold Integer
+
+data ListInfo tm a where
+  LitList      :: [tm a]     -> ListInfo tm [a]
+  LenInfo      :: tm Integer -> ListInfo tm [a]
+
+  -- FoldInfo
+  --   :: SimpleType b
+  --   -- consuming a list of a, where we operate on bs
+  --   => (tm a -> tm b)
+  --   -- fold
+  --   -> Fold b
+  --   -- result
+  --   -> tm b
+  --   -> ListInfo tm a
+
+  AtInfo       :: tm Integer -> tm a -> ListInfo tm [a]
+  ContainsInfo :: tm a               -> ListInfo tm [a]
+
+  -- MapInfo :: (tm a -> tm b) -> tm b -> ListInfo tm a
+
+deriving instance (Eq   (tm a), Eq   (tm Integer)) => Eq   (ListInfo tm [a])
+deriving instance (Show (tm a), Show (tm Integer)) => Show (ListInfo tm [a])
+
 data Located a
   = Located
     { _location :: Pact.Info
