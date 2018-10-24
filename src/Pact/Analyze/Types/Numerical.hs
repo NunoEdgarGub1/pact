@@ -102,6 +102,7 @@ singEq SKeySet   SKeySet   = Just Refl
 singEq SAny      SAny      = Just Refl
 singEq (SList a) (SList b) = apply Refl <$> singEq a b
 singEq SObject   SObject   = Just Refl
+singEq _         _         = Nothing
 
 data Dict ctxt where
   Dict :: ctxt => Dict ctxt

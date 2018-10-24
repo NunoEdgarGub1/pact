@@ -23,7 +23,7 @@ import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
 import           Control.Monad        (when, (>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
-import           Data.SBV             (SBV, SymWord, Symbolic, newArray_, SArray)
+import           Data.SBV             (SBV, SymWord, Symbolic)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
@@ -43,12 +43,9 @@ allocSchema (Schema fieldTys) = Object <$>
 allocAVal :: EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
-  -- EListType (_ :: Type t) -> mkAList
-  --   <$> (alloc :: Symbolic (SBV Integer))
-  --   <*> (newArray_ :: Symbolic (SArray Integer t))
 
-  -- EType (singConcrete -> Proxy :: Proxy ty) -> mkAVal . sansProv <$>
-  --   (alloc :: Symbolic (SBV ty))
+  EType (_ :: SingTy ty) -> mkAVal . sansProv <$>
+    (alloc :: Symbolic (SBV (Concrete ty)))
 
 allocTVal :: EType -> Symbolic TVal
 allocTVal ety = (ety,) <$> allocAVal ety
@@ -155,9 +152,9 @@ saturateModel =
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBV.Query AVal
-        -- go (EType (_ :: SingTy t)) (AVal _mProv sval) = mkAVal' . SBV.literal
-        --   <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
-        -- go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
+        go (EType (_ :: SingTy t)) (AVal _mProv sval) = mkAVal' . SBV.literal
+          <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
+        go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go _ _ = error "fetchTVal: impossible"
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
