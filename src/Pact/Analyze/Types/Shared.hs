@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -11,8 +12,11 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Pact.Analyze.Types.Shared where
 
@@ -54,6 +58,7 @@ import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Prelude                      hiding (Float)
+import Data.Proxy
 
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
@@ -68,9 +73,9 @@ data Fold a where
   AndFold :: Fold Bool
   AddFold :: Fold Integer
 
-data ListInfo tm a where
-  LitList      :: [tm a]     -> ListInfo tm [a]
-  LenInfo      :: tm Integer -> ListInfo tm [a]
+data ListInfo (tm :: Ty -> *) (a :: Ty) where
+  LitList      :: [tm a]     -> ListInfo tm ('TyList a)
+  LenInfo      :: tm 'TyInteger -> ListInfo tm ('TyList a)
 
   -- FoldInfo
   --   :: SimpleType b
@@ -82,13 +87,13 @@ data ListInfo tm a where
   --   -> tm b
   --   -> ListInfo tm a
 
-  AtInfo       :: tm Integer -> tm a -> ListInfo tm [a]
-  ContainsInfo :: tm a               -> ListInfo tm [a]
+  AtInfo       :: tm 'TyInteger -> tm a -> ListInfo tm ('TyList a)
+  ContainsInfo :: tm a               -> ListInfo tm ('TyList a)
 
   -- MapInfo :: (tm a -> tm b) -> tm b -> ListInfo tm a
 
-deriving instance (Eq   (tm a), Eq   (tm Integer)) => Eq   (ListInfo tm [a])
-deriving instance (Show (tm a), Show (tm Integer)) => Show (ListInfo tm [a])
+deriving instance (Eq   (tm a), Eq   (tm 'TyInteger)) => Eq   (ListInfo tm ('TyList a))
+deriving instance (Show (tm a), Show (tm 'TyInteger)) => Show (ListInfo tm ('TyList a))
 
 data Located a
   = Located
@@ -103,10 +108,11 @@ instance Mergeable a => Mergeable (Located a) where
   symbolicMerge f t (Located i a) (Located i' a') =
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
-data Existential (tm :: * -> *) where
-  ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
-  EList   :: SimpleType a => Type a -> tm [a]    -> Existential tm
-  EObject ::                 Schema -> tm Object -> Existential tm
+data Existential (tm :: Ty -> *) where
+  ESimple :: SimpleType (Concrete a) => SingTy a -> tm a          -> Existential tm
+  -- TODO: combine with ESimple?
+  EList   :: SimpleType (Concrete a) => SingTy a -> tm (TyList a) -> Existential tm
+  EObject ::                            Schema   -> tm TyObject   -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
@@ -127,7 +133,7 @@ mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
-existentialType (EList   ety _) = EListType ety
+-- existentialType (EList   ety _) = EType (SList ety) -- EListType ety
 existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
@@ -224,6 +230,9 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
+-- newtype Str = Str String
+--   deriving (Show, Eq, Ord, IsString, UserShow)
+
 type RowKey = String
 
 type Time = Int64
@@ -299,32 +308,33 @@ data OriginatingCell
   = OriginatingCell
     { _ocTableName  :: TableName
     , _ocColumnName :: ColumnName
-    , _ocRowKey     :: S RowKey
-    , _ocDirty      :: S Bool
+    , _ocRowKey     :: S TyRowKey
+    , _ocDirty      :: S 'TyBool
     }
   deriving (Eq, Show)
 
 data Provenance
   = FromCell    OriginatingCell
-  | FromNamedKs (S KeySetName)
+  | FromNamedKs (S TyKeySetName)
   | FromInput   Unmunged
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
 -- particular table+row.
-data S a
+data S (a :: Ty)
   = S
     { _sProv :: Maybe Provenance
-    , _sSbv  :: SBV a }
+    , _sSbv  :: SBV (Concrete a) }
   deriving (Eq, Show)
 
-sansProv :: SBV a -> S a
+sansProv :: SBV (Concrete a) -> S a
 sansProv = S Nothing
 
-withProv :: Provenance -> SBV a -> S a
+withProv :: Provenance -> SBV (Concrete a) -> S a
 withProv prov sym = S (Just prov) sym
 
-instance SymWord a => Mergeable (S a) where
+-- XXX: UndecidableInstances
+instance (SymWord (Concrete a)) => Mergeable (S a) where
   symbolicMerge f t (S mProv1 x) (S mProv2 y)
     | mProv1 == mProv2 = S mProv1 $ symbolicMerge f t x y
     | otherwise        = sansProv $ symbolicMerge f t x y
@@ -336,25 +346,25 @@ instance SymWord a => Mergeable (S a) where
 instance EqSymbolic (S a) where
   S _ x .== S _ y = x .== y
 
-instance SymWord a => OrdSymbolic (S a) where
-  S _ x .< S _ y = x .< y
+-- instance SymWord (Concrete a) => OrdSymbolic (S a) where
+--   S _ x .< S _ y = x .< y
 
 -- We don't care about preserving the provenance value here as we are most
 -- interested in tracking `SBV KeySet`s, but really as soon as we apply a
 -- transformation to a symbolic value, we are no longer working with the value
 -- that was sourced from the database.
-instance Boolean (S Bool) where
+instance Boolean (S 'TyBool) where
   true            = sansProv true
   false           = sansProv false
   bnot (S _ x)    = sansProv $ bnot x
   S _ x &&& S _ y = sansProv $ x &&& y
   S _ x ||| S _ y = sansProv $ x ||| y
 
-instance IsString (S String) where
+instance IsString (S 'TyStr) where
   fromString = sansProv . fromString
 
-instance SymbolicDecimal (S Decimal) where
-  type IntegerOf (S Decimal) = S Integer
+instance SymbolicDecimal (S 'TyDecimal) where
+  type IntegerOf (S 'TyDecimal) = S 'TyInteger
   fromInteger' (S _ a)       = sansProv (fromInteger' a)
   lShiftD  i       (S _ d)   = sansProv (lShiftD  i d)
   lShiftD' (S _ i) (S _ d)   = sansProv (lShiftD' i d)
@@ -368,7 +378,7 @@ instance SymbolicDecimal (S Decimal) where
 -- `rShift255D`. In the instance below, `*` resolves to `*` from `*` from
 -- `instance (Ord a, Num a, SymWord a) => Num (SBV a)`, included in sbv, which
 -- does to include the shift. *This instance must be selected for decimals*.
-instance {-# OVERLAPPING #-} Num (S Decimal) where
+instance {-# OVERLAPPING #-} Num (S 'TyDecimal) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
   abs (S _ x)    = sansProv $ abs x
@@ -376,29 +386,29 @@ instance {-# OVERLAPPING #-} Num (S Decimal) where
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
 
-instance (Num a, SymWord a) => Num (S a) where
-  S _ x + S _ y  = sansProv $ x + y
-  S _ x * S _ y  = sansProv $ x * y
-  abs (S _ x)    = sansProv $ abs x
-  signum (S _ x) = sansProv $ signum x
-  fromInteger i  = sansProv $ fromInteger i
-  negate (S _ x) = sansProv $ negate x
+-- instance (b ~ Concrete a, Num b, SymWord b) => Num (S a) where
+--   S _ x + S _ y  = sansProv $ x + y
+--   S _ x * S _ y  = sansProv $ x * y
+--   abs (S _ x)    = sansProv $ abs x
+--   signum (S _ x) = sansProv $ signum x
+--   fromInteger i  = sansProv $ fromInteger i
+--   negate (S _ x) = sansProv $ negate x
 
 -- Caution: see note [OverlappingInstances] *This instance must be selected for
 -- decimals*.
-instance {-# OVERLAPPING #-} Fractional (S Decimal) where
+instance {-# OVERLAPPING #-} Fractional (S 'TyDecimal) where
   fromRational  = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
-instance (Fractional a, SymWord a) => Fractional (S a) where
-  fromRational = literalS . fromRational
-  S _ x / S _ y = sansProv $ x / y
+-- instance (Fractional a, SymWord a) => Fractional (S a) where
+--   fromRational = literalS . fromRational
+--   S _ x / S _ y = sansProv $ x / y
 
-instance SDivisible (S Integer) where
+instance SDivisible (S 'TyInteger) where
   S _ a `sQuotRem` S _ b = a `sQuotRem` b & both %~ sansProv
   S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ sansProv
 
-type PredicateS = Symbolic (S Bool)
+type PredicateS = Symbolic (S 'TyBool)
 
 instance Provable PredicateS where
   forAll_   = fmap _sSbv
@@ -407,20 +417,20 @@ instance Provable PredicateS where
   forSome _ = fmap _sSbv
 
 -- Until SBV adds a typeclass for strConcat/(.++):
-(.++) :: S String -> S String -> S String
-S _ a .++ S _ b = sansProv $ SBV.concat a b
+(.++) :: S 'TyStr -> S 'TyStr -> S 'TyStr
+S _ a .++ S _ b = sansProv $ coerceSBV $ SBV.concat (coerceSBV a) (coerceSBV b)
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
-sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
+sbv2S :: Iso (SBV (Concrete a)) (SBV (Concrete b)) (S a) (S b)
 sbv2S = iso sansProv _sSbv
 
-fromCell :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
+fromCell :: TableName -> ColumnName -> S TyRowKey -> S 'TyBool -> Provenance
 fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
 
-fromNamedKs :: S KeySetName -> Provenance
+fromNamedKs :: S TyKeySetName -> Provenance
 fromNamedKs = FromNamedKs
 
-symRowKey :: S String -> S RowKey
+symRowKey :: S 'TyStr -> S TyRowKey
 symRowKey = coerceS
 
 -- | Typed symbolic value.
@@ -482,7 +492,7 @@ data AVal
   | AnObj Object
   | OpaqueVal
 
-data SList a = SList (SBV Integer) (SArray Integer a)
+-- data SList a = SList (SBV Integer) (SArray Integer a)
 
 mkAList :: SBV Integer -> SArray Integer a -> AVal
 mkAList (SBVI.SBV len) (SBVI.SArray arr) = AList len arr
@@ -526,16 +536,16 @@ instance EqSymbolic AVal where
 mkS :: Maybe Provenance -> SBVI.SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
 
-literalS :: SymWord a => a -> S a
+literalS :: SymWord (Concrete a) => Concrete a -> S a
 literalS = sansProv . literal
 
-unliteralS :: SymWord a => S a -> Maybe a
+unliteralS :: SymWord (Concrete a) => S a -> Maybe (Concrete a)
 unliteralS = unliteral . _sSbv
 
-sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
+sbv2SFrom :: Provenance -> Iso (SBV (Concrete a)) (SBV (Concrete b)) (S a) (S b)
 sbv2SFrom prov = iso (withProv prov) _sSbv
 
-s2Sbv :: Iso (S a) (S b) (SBV a) (SBV b)
+s2Sbv :: Iso (S a) (S b) (SBV (Concrete a)) (SBV (Concrete b))
 s2Sbv = from sbv2S
 
 mkAVal :: S a -> AVal
@@ -544,26 +554,28 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
 
-coerceS :: Coercible a b => S a -> S b
+coerceS :: forall a b. Coercible (Concrete a) (Concrete b) => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
 
 unsafeCoerceS :: S a -> S b
 unsafeCoerceS (S mProv a) = S mProv $ unsafeCoerceSBV a
 
-iteS :: Mergeable a => S Bool -> a -> a -> a
+iteS :: Mergeable a => S 'TyBool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
 
 fromIntegralS
-  :: forall a b
-  . (Integral a, SymWord a, Num b, SymWord b)
+  :: forall a b a' b'
+  . ( a' ~ Concrete a
+    , b' ~ Concrete b
+    , Integral a', SymWord a', Num b', SymWord b')
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
 
-oneIfS :: (Num a, SymWord a) => S Bool -> S a
+oneIfS :: (Num (Concrete a), SymWord (Concrete a)) => S 'TyBool -> S a
 oneIfS = over s2Sbv oneIf
 
-isConcreteS :: SymWord a => S a -> Bool
+isConcreteS :: SymWord (Concrete a) => S a -> Bool
 isConcreteS = isConcrete . _sSbv
 
 data QKind = QType | QAny
@@ -572,19 +584,18 @@ data QKind = QType | QAny
 type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a, Typeable a)
 
 data Quantifiable :: QKind -> * where
-  -- TODO: parametrize over constraint
-  EType     :: SimpleType a =>                    Type a -> Quantifiable q
-  EListType :: SimpleType a =>                    Type a -> Quantifiable q
-  EObjectTy ::                                    Schema -> Quantifiable q
-  QTable    ::                                              Quantifiable 'QAny
-  QColumnOf :: TableName                                 -> Quantifiable 'QAny
+  EType     :: SimpleType (Concrete a) => SingTy a  -> Quantifiable q
+  -- EListType :: SingTy a  -> Quantifiable q
+  EObjectTy :: Schema    -> Quantifiable q
+  QTable    ::              Quantifiable 'QAny
+  QColumnOf :: TableName -> Quantifiable 'QAny
 
 deriving instance Show (Quantifiable q)
 
 instance Eq (Quantifiable q) where
-  EType a == EType b = case typeEq a b of
-    Just _refl -> True
-    Nothing    -> False
+  EType a == EType b = case singEq a b of
+    Just Refl -> True
+    Nothing   -> False
   EObjectTy a == EObjectTy b = a == b
   QTable      == QTable      = True
   QColumnOf a == QColumnOf b = a == b
@@ -599,13 +610,13 @@ type QType = Quantifiable 'QAny
 coerceQType :: EType -> QType
 coerceQType = \case
   EType ty         -> EType ty
-  EListType ty     -> EListType ty
+  -- EListType ty     -> EListType ty
   EObjectTy schema -> EObjectTy schema
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
   EType ty         -> Just $ EType ty
-  EListType ty     -> Just $ EListType ty
+  -- EListType ty     -> Just $ EListType ty
   EObjectTy schema -> Just $ EObjectTy schema
   _                -> Nothing
 
@@ -678,47 +689,59 @@ instance HasKind KeySet where
 instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
--- The type of a simple type
-data Type a where
-  TInt     ::                           Type Integer
-  TBool    ::                           Type Bool
-  TStr     ::                           Type String
-  TTime    ::                           Type Time
-  TDecimal ::                           Type Decimal
-  TKeySet  ::                           Type KeySet
-  TAny     ::                           Type Any
-  -- XXX should this go away give EListType?
-  TList    :: SimpleType a => Type a -> Type [a]
+type family Concrete (a :: Ty) where
+  Concrete 'TyInteger  = Integer
+  Concrete 'TyBool     = Bool
+  Concrete 'TyStr      = String
+  Concrete 'TyTime     = Time
+  Concrete 'TyDecimal  = Decimal
+  Concrete 'TyKeySet   = KeySet
+  Concrete 'TyAny      = Any
+  Concrete ('TyList a) = [Concrete a]
+  Concrete 'TyObject   = Object
 
-deriving instance Show (Type a)
-deriving instance Eq (Type a)
+singConcrete :: SingTy ty -> Proxy (Concrete ty)
+singConcrete = \case
+  SInteger -> Proxy
+  SBool    -> Proxy
+  SStr     -> Proxy
+  STime    -> Proxy
+  SDecimal -> Proxy
+  SKeySet  -> Proxy
+  SAny     -> Proxy
+  SList _  -> Proxy
+  SObject  -> Proxy
+
+-- -- The type of a simple type
+-- data Type a where
+--   TInt     ::                           Type Integer
+--   TBool    ::                           Type Bool
+--   TStr     ::                           Type String
+--   TTime    ::                           Type Time
+--   TDecimal ::                           Type Decimal
+--   TKeySet  ::                           Type KeySet
+--   TAny     ::                           Type Any
+--   -- XXX should this go away give EListType?
+--   TList    :: SimpleType a => Type a -> Type [a]
+
+-- deriving instance Show (Type a)
+-- deriving instance Eq   (Type a)
 
 -- data List a = List [a]
 --   deriving (Show, Eq, Ord)
 
 -- instance SMTValue (List a)
 
-typeEq :: Type a -> Type b -> Maybe (a :~: b)
-typeEq TInt     TInt       = Just Refl
-typeEq TBool    TBool      = Just Refl
-typeEq TStr     TStr       = Just Refl
-typeEq TTime    TTime      = Just Refl
-typeEq TDecimal TDecimal   = Just Refl
-typeEq TAny     TAny       = Just Refl
-typeEq TKeySet  TKeySet    = Just Refl
-typeEq (TList a) (TList b) = apply Refl <$> typeEq a b
-typeEq _        _          = Nothing
-
-instance UserShow (Type a) where
-  userShowsPrec _ = \case
-    TInt     -> "integer"
-    TBool    -> "bool"
-    TStr     -> "string"
-    TTime    -> "time"
-    TDecimal -> "decimal"
-    TKeySet  -> "keyset"
-    TAny     -> "*"
-    TList a  -> "[" <> userShow a <> "]"
+-- typeEq :: Type a -> Type b -> Maybe (a :~: b)
+-- typeEq TInt     TInt       = Just Refl
+-- typeEq TBool    TBool      = Just Refl
+-- typeEq TStr     TStr       = Just Refl
+-- typeEq TTime    TTime      = Just Refl
+-- typeEq TDecimal TDecimal   = Just Refl
+-- typeEq TAny     TAny       = Just Refl
+-- typeEq TKeySet  TKeySet    = Just Refl
+-- typeEq (TList a) (TList b) = apply Refl <$> typeEq a b
+-- typeEq _        _          = Nothing
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
@@ -742,7 +765,7 @@ instance Mergeable a => Mergeable (TableMap a) where
 instance UserShow (Quantifiable q) where
   userShowsPrec d = \case
     EType ty     -> userShowsPrec d ty
-    EListType ty -> brackets $ userShowsPrec 0 ty
+    -- EListType ty -> brackets $ userShowsPrec 0 ty
     EObjectTy ty -> userShowsPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"
