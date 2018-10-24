@@ -38,7 +38,7 @@ indent times = indent (pred times) . indent1
 showSbv :: (UserShow a, SymWord a) => SBV a -> Text
 showSbv sbv = maybe "[ERROR:symbolic]" userShow (SBV.unliteral sbv)
 
-showS :: (a' ~ Concrete a, UserShow a', SymWord a') => S a -> Text
+showS :: (UserShow a, SymWord a) => S a -> Text
 showS = showSbv . _sSbv
 
 showTVal :: TVal -> Text
@@ -47,7 +47,7 @@ showTVal (ety, av) = case av of
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
     EObjectTy _           -> error "showModel: impossible object type for AVal"
-    -- EType (_ :: SingTy t) -> showSbv (SBVI.SBV sval :: SBV (Concrete t))
+    EType (_ :: SingTy t) -> showSbv (SBVI.SBV sval :: SBV (Concrete t))
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "
@@ -78,10 +78,10 @@ showWrite :: Located Access -> Text
 showWrite (Located _ (Access srk obj)) = "write " <> showObject obj
                                       <> " to key " <> showS srk
 
-showKsn :: S TyKeySetName -> Text
+showKsn :: S KeySetName -> Text
 showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
-  Nothing  -> "[unknown]"
-  Just ksn -> "'" <> T.pack ksn
+  Nothing               -> "[unknown]"
+  Just (KeySetName ksn) -> "'" <> ksn
 
 showFailure :: Recoverability -> Text
 showFailure = \case

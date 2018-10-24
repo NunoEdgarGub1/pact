@@ -62,11 +62,11 @@ instance Wrapped SymbolicSuccess where
   type Unwrapped SymbolicSuccess = SBV Bool
   _Wrapped' = iso successBool SymbolicSuccess
 
-class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
+class (MonadError AnalyzeFailure m , S :*<: TermOf m) => Analyzer m where
   type TermOf m :: Ty -> *
   eval          :: (a' ~ Concrete a, Show a', SymWord a')
-                => TermOf m a        -> m (S a)
-  evalO         :: TermOf m TyObject -> m Object
+                => TermOf m a         -> m (S a')
+  evalO         :: TermOf m 'TyObject -> m Object
 
   -- evalL           :: (Show a, SymWord a) => TermOf m ('TyList a) -> m (S ('TyList a))
 
@@ -75,7 +75,7 @@ class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   -- short-circuiting ops correctly for (effectful) terms. Though, luckily the
   -- invariant and prop languages are pure, so we're fine to implement them in
   -- terms of `|||` / `&&&`.
-  evalLogicalOp   :: LogicalOp -> [TermOf m 'TyBool] -> m (S 'TyBool)
+  evalLogicalOp   :: LogicalOp -> [TermOf m 'TyBool] -> m (S Bool)
 
   throwErrorNoLoc :: AnalyzeFailureNoLoc                    -> m a
   getVar          :: VarId                                  -> m (Maybe AVal)
@@ -181,8 +181,8 @@ data LatticeAnalyzeState
     , _lasColumnsWritten      :: TableMap (ColumnMap (SBV Bool))
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
     , _lasDecCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Decimal))
-    , _lasIntColumnDeltas     :: TableMap (ColumnMap (S 'TyInteger))
-    , _lasDecColumnDeltas     :: TableMap (ColumnMap (S 'TyDecimal))
+    , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
+    , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
     , _lasTableCells          :: TableMap SymbolicCells
     , _lasRowsRead            :: TableMap (SFunArray RowKey Integer)
     , _lasRowsWritten         :: TableMap (SFunArray RowKey Integer)
@@ -260,10 +260,10 @@ mkInitialAnalyzeState tables = AnalyzeState
 
     intCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyInteger) (mkSFunArray (const 0))
     decCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
-    intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) (fromInteger 0)
+    intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyDecimal) (fromInteger 0)
     cellsEnforced
-      = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
+      = mkTableColumnMap (== TyPrim Pact.TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
@@ -348,7 +348,7 @@ instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 -- | Whether the program will successfully run to completion without aborting.
-succeeds :: Lens' AnalyzeState (S 'TyBool)
+succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds._Wrapped'.sbv2S
 
 -- | Whether execution will reach a given point in the program according to
@@ -381,132 +381,132 @@ succeeds = latticeState.lasSucceeds._Wrapped'.sbv2S
 -- let that code consider 'TraceAssert' and 'TraceAuth' 'TraceEvent's on its
 -- own to determine where linear execution aborts for a concrete program trace.
 --
-purelyReachable :: Lens' AnalyzeState (S 'TyBool)
+purelyReachable :: Lens' AnalyzeState (S Bool)
 purelyReachable = latticeState.lasPurelyReachable.sbv2S
 
 maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Located SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
 
-tableRead :: TableName -> Lens' AnalyzeState (S 'TyBool)
+tableRead :: TableName -> Lens' AnalyzeState (S Bool)
 tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 
-tableWritten :: TableName -> Lens' AnalyzeState (S 'TyBool)
+tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
-columnWritten :: TableName -> ColumnName -> Lens' AnalyzeState (S 'TyBool)
+columnWritten :: TableName -> ColumnName -> Lens' AnalyzeState (S Bool)
 columnWritten tn cn = latticeState.lasColumnsWritten.singular (ix tn).
   singular (ix cn).sbv2S
 
-columnRead :: TableName -> ColumnName -> Lens' AnalyzeState (S 'TyBool)
+columnRead :: TableName -> ColumnName -> Lens' AnalyzeState (S Bool)
 columnRead tn cn = latticeState.lasColumnsRead.singular (ix tn).
   singular (ix cn).sbv2S
 
 intCellDelta
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> Lens' AnalyzeState (S 'TyInteger)
+  -> S RowKey
+  -> Lens' AnalyzeState (S Integer)
 intCellDelta tn cn sRk = latticeState.lasIntCellDeltas.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
 decCellDelta
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> Lens' AnalyzeState (S 'TyDecimal)
+  -> S RowKey
+  -> Lens' AnalyzeState (S Decimal)
 decCellDelta tn cn sRk = latticeState.lasDecCellDeltas.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
-intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S 'TyInteger)
+intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
 intColumnDelta tn cn = latticeState.lasIntColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-decColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S 'TyDecimal)
+decColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Decimal)
 decColumnDelta tn cn = latticeState.lasDecColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-rowReadCount :: TableName -> S TyRowKey -> Lens' AnalyzeState (S 'TyInteger)
+rowReadCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
 rowReadCount tn sRk = latticeState.lasRowsRead.singular (ix tn).
   symArrayAt sRk.sbv2S
 
-rowWriteCount :: TableName -> S TyRowKey -> Lens' AnalyzeState (S 'TyInteger)
+rowWriteCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
 rowWriteCount tn sRk = latticeState.lasRowsWritten.singular (ix tn).
   symArrayAt sRk.sbv2S
 
 cellEnforced
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> Lens' AnalyzeState (S 'TyBool)
+  -> S RowKey
+  -> Lens' AnalyzeState (S Bool)
 cellEnforced tn cn sRk = latticeState.lasCellsEnforced.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
 cellWritten
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> Lens' AnalyzeState (S 'TyBool)
+  -> S RowKey
+  -> Lens' AnalyzeState (S Bool)
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
 intCell
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> S 'TyBool
-  -> Lens' AnalyzeState (S 'TyInteger)
+  -> S RowKey
+  -> S Bool
+  -> Lens' AnalyzeState (S Integer)
 intCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scIntValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 boolCell
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> S 'TyBool
-  -> Lens' AnalyzeState (S 'TyBool)
+  -> S RowKey
+  -> S Bool
+  -> Lens' AnalyzeState (S Bool)
 boolCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scBoolValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 stringCell
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> S 'TyBool
-  -> Lens' AnalyzeState (S 'TyStr)
+  -> S RowKey
+  -> S Bool
+  -> Lens' AnalyzeState (S String)
 stringCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scStringValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 decimalCell
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> S 'TyBool
-  -> Lens' AnalyzeState (S 'TyDecimal)
+  -> S RowKey
+  -> S Bool
+  -> Lens' AnalyzeState (S Decimal)
 decimalCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 timeCell
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> S 'TyBool
-  -> Lens' AnalyzeState (S 'TyTime)
+  -> S RowKey
+  -> S Bool
+  -> Lens' AnalyzeState (S Time)
 timeCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scTimeValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 ksCell
   :: TableName
   -> ColumnName
-  -> S TyRowKey
-  -> S 'TyBool
-  -> Lens' AnalyzeState (S 'TyKeySet)
+  -> S RowKey
+  -> S Bool
+  -> Lens' AnalyzeState (S KeySet)
 ksCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 symArrayAt
   :: forall array k v
    . (SymWord v, SymArray array)
-  => S k -> Lens' (array (Concrete k) v) (SBV v)
+  => S k -> Lens' (array k v) (SBV v)
 symArrayAt (S _ symKey) = lens getter setter
   where
     getter :: array k v -> SBV v
@@ -517,28 +517,28 @@ symArrayAt (S _ symKey) = lens getter setter
 
 nameAuthorized
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S TyKeySetName
-  -> m (S 'TyBool)
+  => S KeySetName
+  -> m (S Bool)
 nameAuthorized sKsn = fmap sansProv $
   readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
 resolveKeySet
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S TyKeySetName
-  -> m (S 'TyKeySet)
+  => S KeySetName
+  -> m (S KeySet)
 resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
 resolveDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S 'TyStr
-  -> m (S 'TyDecimal)
+  => S String
+  -> m (S Decimal)
 resolveDecimal sDn = fmap sansProv $
   readArray <$> view envDecimals <*> pure (_sSbv sDn)
 
 resolveInteger
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S 'TyStr
-  -> m (S 'TyInteger)
+  => S String
+  -> m (S Integer)
 resolveInteger sSn = fmap sansProv $
   readArray <$> view envIntegers <*> pure (_sSbv sSn)

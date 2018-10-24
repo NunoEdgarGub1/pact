@@ -20,7 +20,6 @@ import           Prelude                   hiding (Float)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Types.Shared
-import           Pact.Analyze.Types.Numerical -- for morally shared stuff
 
 -- | An argument to a function
 data Arg = Arg
@@ -107,14 +106,14 @@ data Concreteness
 
 data Access
   = Access
-    { _accRowKey :: S TyRowKey
+    { _accRowKey :: S RowKey
     , _accObject :: Object
     }
   deriving (Eq, Show)
 
 data Authorization
   = Authorization
-    { _authKeySet  :: S 'TyKeySet
+    { _authKeySet  :: S KeySet
     , _authSuccess :: SBV Bool
     }
   deriving (Eq, Show)

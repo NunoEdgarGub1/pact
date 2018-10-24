@@ -28,7 +28,6 @@ import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Traversable     (for)
-import Data.Proxy
 
 import qualified Pact.Types.Typecheck as TC
 
@@ -86,7 +85,7 @@ allocModelTags locatedTm graph = ModelTags
         \(Located info (Binding vid nm _ ety)) ->
           allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
 
-    allocS :: SymWord (Concrete a) => Symbolic (S a)
+    allocS :: SymWord a => Symbolic (S a)
     allocS = sansProv <$> alloc
 
     allocAccesses
@@ -165,7 +164,7 @@ saturateModel =
     fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)
     fetchSbv = fmap SBV.literal . SBV.getValue
 
-    fetchS :: (a' ~ Concrete a, SymWord a', SBV.SMTValue a') => S a -> SBV.Query (S a)
+    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBV.Query (S a)
     fetchS = traverseOf s2Sbv fetchSbv
 
     fetchObject :: Object -> SBVI.Query Object

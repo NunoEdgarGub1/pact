@@ -7,6 +7,8 @@
 {-# LANGUAGE ViewPatterns      #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE FlexibleContexts  #-}
 
 module AnalyzeSpec (spec) where
 
@@ -186,18 +188,20 @@ expectFail code check = do
   res <- runIO $ runCheck (wrap code) check
   it (show check) $ res `shouldSatisfy` isJust
 
-intConserves :: TableName -> ColumnName -> Prop Bool
-intConserves tn cn = CoreProp $ IntegerComparison Eq 0 $ Inj $
-  IntColumnDelta (PLit tn) (PLit cn)
+intConserves :: TableName -> ColumnName -> Prop 'TyBool
+intConserves (TableName tn) (ColumnName cn)
+  = CoreProp $ IntegerComparison Eq 0 $ Inj $
+    IntColumnDelta (PLit tn) (PLit cn)
 
-decConserves :: TableName -> ColumnName -> Prop Bool
-decConserves tn cn = CoreProp $ DecimalComparison Eq 0 $ Inj $
-  DecColumnDelta (PLit tn) (PLit cn)
+decConserves :: TableName -> ColumnName -> Prop 'TyBool
+decConserves (TableName tn) (ColumnName cn)
+  = CoreProp $ DecimalComparison Eq 0 $ Inj $
+    DecColumnDelta (PLit tn) (PLit cn)
 
-pattern Success' :: Prop Bool
+pattern Success' :: Prop 'TyBool
 pattern Success' = PropSpecific Success
 
-pattern Abort' :: Prop Bool
+pattern Abort' :: Prop 'TyBool
 pattern Abort' = PropSpecific Abort
 
 pattern Result' :: Prop t
@@ -205,41 +209,41 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
-  -- describe "decimal arithmetic" $ do
-  --   let unlit :: S Decimal -> Decimal
-  --       unlit = fromJust . unliteralS
+  describe "decimal arithmetic" $ do
+    let unlit :: S Decimal -> Decimal
+        unlit = fromJust . unliteralS
 
-  --   it "+"      $ unlit (1.1  +   2.2)  == 3.3
-  --   it "* + +"  $ unlit (1.5  *   1.5)  == 2.25
-  --   it "* + -"  $ unlit (1.5  * (-1.5)) == -2.25
-  --   it "* - +"  $ unlit (-1.5 *   1.5)  == -2.25
-  --   it "* - -"  $ unlit (-1.5 * (-1.5)) == 2.25
+    it "+"      $ unlit (1.1  +   2.2)  == 3.3
+    it "* + +"  $ unlit (1.5  *   1.5)  == 2.25
+    it "* + -"  $ unlit (1.5  * (-1.5)) == -2.25
+    it "* - +"  $ unlit (-1.5 *   1.5)  == -2.25
+    it "* - -"  $ unlit (-1.5 * (-1.5)) == 2.25
 
-  --   it "negate" $ unlit (negate 1.5)    == -1.5
-  --   it "negate" $ unlit (negate (-1.5)) == 1.5
+    it "negate" $ unlit (negate 1.5)    == -1.5
+    it "negate" $ unlit (negate (-1.5)) == 1.5
 
-  --   it "shifts" $ unlit ( 1.5 * fromInteger 10) == 15
-  --   it "shifts" $ unlit (-1.5 * fromInteger 10) == -15
-  --   it "shifts" $ lShift255D (rShift255D 1.5)   == (1 :: Decimal)
+    it "shifts" $ unlit ( 1.5 * fromInteger 10) == 15
+    it "shifts" $ unlit (-1.5 * fromInteger 10) == -15
+    it "shifts" $ lShift255D (rShift255D 1.5)   == (1 :: Decimal)
 
-  --   it "floor" $ floorD @Decimal 0      == 0
-  --   it "floor" $ floorD @Decimal 1.5    == 1
-  --   it "floor" $ floorD @Decimal (-1.5) == -2
+    it "floor" $ floorD @Decimal 0      == 0
+    it "floor" $ floorD @Decimal 1.5    == 1
+    it "floor" $ floorD @Decimal (-1.5) == -2
 
-  -- describe "decimal division" $ do
-  --   let unlit = fromJust . unliteralS @Decimal
+  describe "decimal division" $ do
+    let unlit = fromJust . unliteralS @Decimal
 
-  --   it "can be one half" $ unlit (1 / 2) == 0.5
-  --   it "handles the last decimal correctly" $
-  --     unlit (1581138830084.1918464 / 1581138830084)
-  --     ==
-  --     1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
+    it "can be one half" $ unlit (1 / 2) == 0.5
+    it "handles the last decimal correctly" $
+      unlit (1581138830084.1918464 / 1581138830084)
+      ==
+      1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
 
-  -- describe "banker's method" $ do
-  --   let unlit = fromJust . unliteralS
+  describe "banker's method" $ do
+    let unlit = fromJust . unliteralS
 
-  --   it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
-  --   it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
 
   describe "result" $ do
     let code =
@@ -249,9 +253,8 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ CoreProp $ IntegerComparison Eq
       (Inj (IntArithOp Mul (-1) (PVar 1 "x")))
-      (Inj Result :: Prop Integer)
+      (Inj Result :: Prop 'TyInteger)
 
-  {-
   describe "inlining" $ do
     let code =
           [text|
@@ -264,7 +267,7 @@ spec = describe "analyze" $ do
               (helper a))
           |]
     expectPass code $ Valid $ CoreProp $
-      IntegerComparison Gte (Inj Result :: Prop Integer) 10
+      IntegerComparison Gte (Inj Result :: Prop 'TyInteger) 10
 
   describe "success" $ do
     let code =
@@ -339,7 +342,7 @@ spec = describe "analyze" $ do
       Inj Success
     expectPass code $ Valid $ (CoreProp $ IntegerComparison Eq (PVar 1 "x") 5) ==>
       Inj Success &&&
-        (CoreProp $ BoolComparison Eq (Inj Result :: Prop Bool) true)
+        (CoreProp $ BoolComparison Eq (Inj Result :: Prop 'TyBool) true)
 
   describe "read-keyset.equality" $ do
     let code =
@@ -432,22 +435,22 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable (Inj Success)
-    expectPass code $ Valid $ bnot $ Inj $ Exists 1 "row" (EType TStr) $
+    expectPass code $ Valid $ bnot $ Inj $ Exists 1 "row" (EType SStr) $
       Inj $ RowWrite "tokens" (PVar 1 "row")
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       CoreProp $ IntegerComparison Eq
         (Inj (RowWriteCount "tokens" (PVar 1 "row"))) 0
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr) (Inj $ RowRead "tokens" (PVar 1 "row")))
+      Inj (Exists 1 "row" (EType SStr) (Inj $ RowRead "tokens" (PVar 1 "row")))
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr)
+      Inj (Exists 1 "row" (EType SStr)
         (CoreProp $ IntegerComparison Eq
           (Inj (RowReadCount "tokens" (PVar 1 "row"))) 1))
-    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType TStr) $
+    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
       Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType TStr) $
+    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
       bnot $ Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Valid $ Inj Success ==> (Inj $ Forall 1 "row" (EType TStr) $
+    expectPass code $ Valid $ Inj Success ==> (Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowRead "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row")))
     expectPass code $ Valid $ Inj Success ==>
@@ -490,11 +493,11 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowRead "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks1" (PVar 1 "row"))
     -- Using the other keyset:
-    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowRead "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks2" (PVar 1 "row"))
 
@@ -517,28 +520,28 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable $ Inj Success
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr)
+      Inj (Exists 1 "row" (EType SStr)
         (Inj (RowWrite "tokens" (PVar 1 "row"))))
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr)
+      Inj (Exists 1 "row" (EType SStr)
         (CoreProp $ IntegerComparison Eq
           (Inj (RowWriteCount "tokens" (PVar 1 "row"))) 1))
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr)
+      Inj (Exists 1 "row" (EType SStr)
         (Inj (RowRead "tokens" (PVar 1 "row"))))
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr)
+      Inj (Exists 1 "row" (EType SStr)
         (CoreProp $ IntegerComparison Eq
           (Inj (RowReadCount "tokens" (PVar 1 "row"))) 1))
     expectPass code $ Valid $ Inj Success ==>
-      Inj (Exists 1 "row" (EType TStr)
+      Inj (Exists 1 "row" (EType SStr)
         (Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))))
-    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType TStr) $
+    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
       bnot $ Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowRead "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowWrite "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
     expectPass code $ Valid $ Inj (RowWrite "tokens" (PVar 1 "acct"))
@@ -590,10 +593,10 @@ spec = describe "analyze" $ do
     -- keyset, we don't consider the row to have been enforced due to
     -- invalidation:
     --
-    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowRead "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
-    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
       Inj (RowWrite "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
@@ -808,11 +811,11 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Inj Success
 
     let schema = Schema $
-          Map.fromList [("name", EType TStr), ("balance", EType TInt)]
-        ety    = EType TStr
+          Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
+        ety    = EType SStr
     expectPass code $ Valid $ CoreProp $ StringComparison Eq
       (PObjAt schema (PLit "name") (Inj Result) ety)
-      (PLit "stu" :: Prop String)
+      (PLit "stu" :: Prop 'TyStr)
 
   describe "at.object-in-object" $
     let code =
@@ -847,7 +850,7 @@ spec = describe "analyze" $ do
                      (!= acct2 acct1))))
           |]
 
-    in expectPass code $ Valid (Inj Result :: Prop Bool)
+    in expectPass code $ Valid (Inj Result :: Prop 'TyBool)
 
   describe "merging-objects" $
     let code =
@@ -1117,23 +1120,23 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
-    expectPass code $ Valid $ bnot $ Inj $ Exists 1 "row" (EType TStr) $
+    expectPass code $ Valid $ bnot $ Inj $ Exists 1 "row" (EType SStr) $
       CoreProp $ IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
 
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
-      CoreProp (StringComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob"))
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      CoreProp (StringComparison Neq (PVar 1 "row" :: Prop 'TyStr) (PLit "bob"))
         ==>
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
-      CoreProp (StringComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob"))
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      CoreProp (StringComparison Eq (PVar 1 "row" :: Prop 'TyStr) (PLit "bob"))
         ==>
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
-    expectPass code $ Valid $ Inj $ Exists 1 "row" (EType TStr) $
+    expectPass code $ Valid $ Inj $ Exists 1 "row" (EType SStr) $
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
@@ -1611,8 +1614,8 @@ spec = describe "analyze" $ do
     let a0       = PVar 1 "a"
         a1       = PVar 2 "a"
         -- b        = PVar 1 "b"
-        ty       = EType TStr
-        intTy    = EType TInt
+        ty       = EType SStr
+        intTy    = EType SInteger
         allA0    = Inj ... Forall 1 "a"
         allA1    = Inj ... Forall 2 "a"
         existsA0 = Inj ... Exists 1 "a"
@@ -1662,7 +1665,7 @@ spec = describe "analyze" $ do
           :: Map Text VarId
           -> Map VarId EType
           -> TableEnv
-          -> Type a
+          -> SingTy a
           -> Text
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
@@ -1671,10 +1674,10 @@ spec = describe "analyze" $ do
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
-        textToProp :: Type a -> Text -> Either String (Prop a)
+        textToProp :: SingTy a -> Text -> Either String (Prop a)
         textToProp = textToProp'
           (Map.singleton "result" 0)
-          (Map.singleton 0 (EType TAny))
+          (Map.singleton 0 (EType SAny))
           (TableMap mempty)
 
         inferProp'
@@ -1692,13 +1695,13 @@ spec = describe "analyze" $ do
         inferProp'' :: Text -> Either String EProp
         inferProp'' = inferProp'
           (Map.singleton "result" 0)
-          (Map.singleton 0 (EType TAny))
+          (Map.singleton 0 (EType SAny))
           (TableMap mempty)
 
-        textToPropTableEnv :: TableEnv -> Type a -> Text -> Either String (Prop a)
+        textToPropTableEnv :: TableEnv -> SingTy a -> Text -> Either String (Prop a)
         textToPropTableEnv tableEnv = textToProp'
           (Map.singleton "result" 0)
-          (Map.singleton 0 (EType TAny))
+          (Map.singleton 0 (EType SAny))
           tableEnv
 
         singletonTableEnv :: TableName -> ColumnName -> EType -> TableEnv
@@ -1706,44 +1709,44 @@ spec = describe "analyze" $ do
             ColumnMap $ Map.singleton b ty
 
     it "infers column-delta" $ do
-      let tableEnv = singletonTableEnv "a" "b" (EType TInt)
-      textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
+      let tableEnv = singletonTableEnv "a" "b" (EType SInteger)
+      textToPropTableEnv tableEnv SBool "(> (column-delta 'a 'b) 0)"
         `shouldBe`
         Right (CoreProp $ IntegerComparison Gt (Inj (IntColumnDelta "a" "b")) 0)
 
-      let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
-      textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
+      let tableEnv' = singletonTableEnv "a" "b" (EType SDecimal)
+      textToPropTableEnv tableEnv' SBool "(> (column-delta 'a 'b) 0.0)"
         `shouldBe`
         Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
-      textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
+      textToPropTableEnv tableEnv' SBool "(> (column-delta \"a\" \"b\") 0.0)"
         `shouldBe`
         Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
     it "checks +" $ do
-      textToProp TStr "(+ \"a\" \"b\")"
+      textToProp SStr "(+ \"a\" \"b\")"
         `shouldBe`
         Right (PStrConcat (PLit "a") (PLit "b"))
 
-      textToProp TInt "(+ 0 1)"
+      textToProp SInteger "(+ 0 1)"
         `shouldBe`
-        Right (Inj (IntArithOp Add 0 1 :: Numerical Prop Integer))
+        Right (Inj (IntArithOp Add 0 1 :: Numerical Prop 'TyInteger))
 
-      textToProp TDecimal "(+ 0.0 1.0)"
+      textToProp SDecimal "(+ 0.0 1.0)"
         `shouldBe`
         Right (Inj (DecArithOp Add (PLit 0) (PLit 1)))
 
-      textToProp TDecimal "(+ 0 1)"
+      textToProp SDecimal "(+ 0 1)"
         `shouldBe`
         Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
 
     it "infers prop objects" $ do
       let pairSchema = Schema $
-            Map.fromList [("x", EType TInt), ("y", EType TInt)]
-          ety = EType TInt
+            Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
+          ety = EType SInteger
           litPair = CoreProp $ LiteralObject $ Map.fromList
-            [ ("x", ESimple TInt (PLit 0))
-            , ("y", ESimple TInt (PLit 1))
+            [ ("x", ESimple SInteger (PLit 0))
+            , ("y", ESimple SInteger (PLit 1))
             ]
 
           nestedObj = CoreProp $ LiteralObject $
@@ -1758,7 +1761,7 @@ spec = describe "analyze" $ do
 
       inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
         `shouldBe`
-        Right (ESimple TInt (PObjAt pairSchema (PLit "x") litPair ety))
+        Right (ESimple SInteger (PObjAt pairSchema (PLit "x") litPair ety))
 
       inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
         `shouldBe`
@@ -1768,30 +1771,30 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (ESimple TBool
-            (Inj $ Forall (VarId 1) "x" (EType TStr)
-              (Inj $ Forall (VarId 2) "y" (EType TStr)
+          (ESimple SBool
+            (Inj $ Forall (VarId 1) "x" (EType SStr)
+              (Inj $ Forall (VarId 2) "y" (EType SStr)
                 (CoreProp $ StringComparison Eq
-                  (PVar (VarId 1) "x" :: Prop String)
+                  (PVar (VarId 1) "x" :: Prop 'TyStr)
                   (PVar (VarId 2) "y")))))
 
-      let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
+      let tableEnv = singletonTableEnv "accounts" "balance" $ EType SInteger
       textToPropTableEnv
         tableEnv
-        TBool
+        SBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
         Right (PNot
-          (Inj $ Exists (VarId 1) "row" (EType TStr)
+          (Inj $ Exists (VarId 1) "row" (EType SStr)
             (CoreProp $ IntegerComparison Eq
               (Inj $ IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
               2)))
 
     it "parses row-enforced / vars" $ do
       let env1 = Map.singleton "from" (VarId 1)
-          env2 = Map.singleton (VarId 1) (EType TStr)
-          tableEnv = singletonTableEnv "accounts" "ks" $ EType TKeySet
-      textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
+          env2 = Map.singleton (VarId 1) (EType SStr)
+          tableEnv = singletonTableEnv "accounts" "ks" $ EType SKeySet
+      textToProp' env1 env2 tableEnv SBool "(row-enforced 'accounts 'ks from)"
       `shouldBe`
       Right (Inj $ RowEnforced
         (TableNameLit "accounts")
@@ -1799,14 +1802,14 @@ spec = describe "analyze" $ do
         (PVar (VarId 1) "from"))
 
     it "parses column properties" $
-      let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
-      in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
+      let tableEnv = singletonTableEnv "accounts" "balance" $ EType SInteger
+      in textToPropTableEnv tableEnv SBool "(= (column-delta 'accounts 'balance) 0)"
            `shouldBe`
            Right (CoreProp $ IntegerComparison Eq (Inj $ IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
-      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType TKeySet
-      in textToPropTableEnv tableEnv TBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
+      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType SKeySet
+      in textToPropTableEnv tableEnv SBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
          `shouldBe`
          Right (PLogical OrOp
            [ PLogical NotOp [
@@ -1823,20 +1826,20 @@ spec = describe "analyze" $ do
             (TableMap mempty)
             ty
 
-      textToProp   TBool "abort"   `shouldBe` Right Abort'
-      textToProp   TBool "success" `shouldBe` Right Success'
-      inferProp''  "abort"         `shouldBe` Right (ESimple TBool Abort')
-      inferProp''  "success"       `shouldBe` Right (ESimple TBool Success')
+      textToProp   SBool "abort"   `shouldBe` Right Abort'
+      textToProp   SBool "success" `shouldBe` Right Success'
+      inferProp''  "abort"         `shouldBe` Right (ESimple SBool Abort')
+      inferProp''  "success"       `shouldBe` Right (ESimple SBool Success')
 
-      textToProp'' TBool "result"  `shouldBe` Right Result'
-      textToProp'' TInt  "result"  `shouldBe` Right Result'
-      textToProp'' TStr  "result"  `shouldBe` Right Result'
+      textToProp'' SBool "result"  `shouldBe` Right Result'
+      textToProp'' SInteger  "result"  `shouldBe` Right Result'
+      textToProp'' SStr  "result"  `shouldBe` Right Result'
 
     it "parses quantified tables" $
       inferProp'' "(forall (table:table) (not (table-written table)))"
         `shouldBe`
         Right
-          (ESimple TBool
+          (ESimple SBool
             $ Inj $ Forall (VarId 1) "table" QTable
               $ PNot $ Inj $ TableWrite $
                 CoreProp $ Var (VarId 1) "table")
@@ -1850,7 +1853,7 @@ spec = describe "analyze" $ do
         |]
         `shouldBe`
         Right
-          (ESimple TBool
+          (ESimple SBool
             (Inj $ Forall (VarId 1) "table" QTable
               (Inj $ Forall (VarId 2) "column" (QColumnOf "table")
                 (Inj (ColumnWritten
@@ -1868,10 +1871,10 @@ spec = describe "analyze" $ do
       userShow (PreBoolLit False)           `shouldBe` "false"
 
     it "renders quantifiers how you would expect" $ do
-      userShow (PreForall 0 "foo" (EType TBool) (PreVar 0 "foo"))
+      userShow (PreForall 0 "foo" (EType SBool) (PreVar 0 "foo"))
         `shouldBe`
         "(forall (foo:bool) foo)"
-      userShow (PreExists 0 "bar" (EType TBool) (PreApp "not" [PreVar 0 "bar"]))
+      userShow (PreExists 0 "bar" (EType SBool) (PreApp "not" [PreVar 0 "bar"]))
         `shouldBe`
         "(exists (bar:bool) (not bar))"
 
@@ -1980,7 +1983,7 @@ spec = describe "analyze" $ do
   describe "UserShow" $
     it "schema looks okay" $ do
       let schema = Schema $
-            Map.fromList [("name", EType TStr), ("balance", EType TInt)]
+            Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
       userShow schema `shouldBe` "{ balance: integer, name: string }"
 
   describe "at-properties verify" $ do
@@ -2077,7 +2080,7 @@ spec = describe "analyze" $ do
           | otherwise
           = False
 
-        expectTrace :: Text -> Prop Bool -> [TraceEvent -> Bool] -> Spec
+        expectTrace :: Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
         expectTrace code prop tests = do
           res <- runIO $ runCheck (wrap code) $ Valid prop
           it "produces the correct trace" $
@@ -2142,7 +2145,6 @@ spec = describe "analyze" $ do
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
--}
 
     let code' model = [text|
           (defun test:[integer] ()

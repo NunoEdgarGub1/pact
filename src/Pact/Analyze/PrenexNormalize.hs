@@ -32,34 +32,34 @@ import           Pact.Analyze.Util
   CoreProp Sym{}      -> ([], p);                                     \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
 
-instance Float TyInteger where
+instance Float 'TyInteger where
   float = floatIntegerQuantifiers
 
-instance Float TyBool where
+instance Float 'TyBool where
   float = floatBoolQuantifiers
 
-instance Float TyDecimal where
+instance Float 'TyDecimal where
   float = floatDecimalQuantifiers
 
-instance Float TyStr where
+instance Float 'TyStr where
   float = floatStringQuantifiers
 
-instance Float TyTime where
+instance Float 'TyTime where
   float = floatTimeQuantifiers
 
-instance Float TyObject where
+instance Float 'TyObject where
   float p = case p of
     STANDARD_INSTANCES
     CoreProp Numerical{} -> vacuousMatch "numerical can't be Object"
     CoreProp LiteralObject{} -> ([], p)
     CoreProp ObjectMerge{} -> ([], p)
 
-instance Float TyKeySet where
+instance Float 'TyKeySet where
   float p = case p of
     STANDARD_INSTANCES
     CoreProp Numerical{} -> vacuousMatch "numerical can't be KeySet"
 
-instance Float TyAny where
+instance Float 'TyAny where
   float p = case p of
     STANDARD_INSTANCES
     CoreProp Numerical{} -> vacuousMatch "numerical can't be Any"
@@ -69,7 +69,7 @@ flipQuantifier = \case
   Forall' uid name ty -> Exists' uid name ty
   Exists' uid name ty -> Forall' uid name ty
 
-floatIntegerQuantifiers :: Prop TyInteger -> ([Quantifier], Prop TyInteger)
+floatIntegerQuantifiers :: Prop 'TyInteger -> ([Quantifier], Prop 'TyInteger)
 floatIntegerQuantifiers p = case p of
   STANDARD_INSTANCES
 
@@ -91,7 +91,7 @@ floatIntegerQuantifiers p = case p of
     -> PropSpecific . RowReadCount tn    <$> float pRk
   PropSpecific IntColumnDelta{} -> ([], p)
 
-floatDecimalQuantifiers :: Prop TyDecimal -> ([Quantifier], Prop TyDecimal)
+floatDecimalQuantifiers :: Prop 'TyDecimal -> ([Quantifier], Prop 'TyDecimal)
 floatDecimalQuantifiers p = case p of
   STANDARD_INSTANCES
   CoreProp (Numerical (DecArithOp op a b))
@@ -108,20 +108,20 @@ floatDecimalQuantifiers p = case p of
     -> PropSpecific . DecCellDelta tn cn  <$> float a
   PropSpecific DecColumnDelta{} -> ([], p)
 
-floatStringQuantifiers :: Prop TyStr -> ([Quantifier], Prop TyStr)
+floatStringQuantifiers :: Prop 'TyStr -> ([Quantifier], Prop 'TyStr)
 floatStringQuantifiers p = case p of
   STANDARD_INSTANCES
   CoreProp Numerical{} -> vacuousMatch "numerical can't be String"
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
 
-floatTimeQuantifiers :: Prop TyTime -> ([Quantifier], Prop TyTime)
+floatTimeQuantifiers :: Prop 'TyTime -> ([Quantifier], Prop 'TyTime)
 floatTimeQuantifiers p = case p of
   STANDARD_INSTANCES
   CoreProp Numerical{} -> vacuousMatch "numerical can't be Time"
   CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
 
-floatBoolQuantifiers :: Prop TyBool -> ([Quantifier], Prop TyBool)
+floatBoolQuantifiers :: Prop 'TyBool -> ([Quantifier], Prop 'TyBool)
 floatBoolQuantifiers p = case p of
   STANDARD_INSTANCES
 
@@ -163,7 +163,7 @@ floatBoolQuantifiers p = case p of
         b' = b
     -- let (qa, a') = float a
     --     (qb, b') = float b
-    in (qa, CoreProp (ListEqNeq op (ESimple tyA a') (ESimple tyB b')))
+    in (qa ++ qb, CoreProp (ListEqNeq op (ESimple tyA a') (ESimple tyB b')))
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b
@@ -173,7 +173,7 @@ floatBoolQuantifiers p = case p of
   PropSpecific (RowRead  tn pRk) -> PropSpecific . RowRead  tn <$> float pRk
   PropSpecific (RowWrite tn pRk) -> PropSpecific . RowWrite tn <$> float pRk
 
-reassembleFloated :: [Quantifier] -> Prop TyBool -> Prop TyBool
+reassembleFloated :: [Quantifier] -> Prop 'TyBool -> Prop 'TyBool
 reassembleFloated qs prop =
   let mkQuantifiedProp q acc = case q of
         Forall' uid name ty -> PropSpecific (Forall uid name ty acc)
@@ -188,5 +188,5 @@ reassembleFloated qs prop =
 -- the first two cases, we capture the quantifier to float it up. In the @PNot@
 -- case, we flip all the quantifiers found inside the @PNot@ as we lift them
 -- over it.
-prenexConvert :: Prop TyBool -> Prop TyBool
+prenexConvert :: Prop 'TyBool -> Prop 'TyBool
 prenexConvert = uncurry reassembleFloated . floatBoolQuantifiers

@@ -35,7 +35,7 @@ module Pact.Analyze.Parse.Prop
 
 import           Control.Applicative
 import           Control.Lens                 (at, ix, view, (%~), (&), (.~),
-                                               (?~), (^..), (^?), toListOf)
+                                               (?~), (^?), toListOf)
 import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
@@ -203,7 +203,7 @@ parseType = \case
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
-  ( VarId -> Text -> QType -> Prop TyBool -> PropSpecific TyBool
+  ( VarId -> Text -> QType -> Prop 'TyBool -> PropSpecific 'TyBool
   , VarId
   , Text
   , QType
@@ -359,7 +359,7 @@ inferPreProp preProp = case preProp of
   PreApp op'@(toOp comparisonOpP -> Just op) [a, b] -> do
     a' <- inferPreProp a
     b' <- inferPreProp b
-    let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop TyBool)
+    let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop 'TyBool)
             -> Prop a -> Prop a -> PropCheck EProp
         ret c aProp bProp = pure $ ESimple SBool $ c op aProp bProp
         eqNeqMsg :: Text -> Text

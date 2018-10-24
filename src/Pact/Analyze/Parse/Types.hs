@@ -66,8 +66,8 @@ instance UserShow PreProp where
     PreDecimalLit d -> userShow d
     PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
     PreBoolLit b    -> tShow (Pact.LBool b)
-    PreListLit list ->
-      "[" <> T.intercalate ", " (fmap (userShowsPrec 0) list) <> "]"
+    PreListLit lst  ->
+      "[" <> T.intercalate ", " (fmap (userShowsPrec 0) lst) <> "]"
 
     PreAbort        -> STransactionAborts
     PreSuccess      -> STransactionSucceeds

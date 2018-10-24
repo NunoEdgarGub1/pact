@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
@@ -11,7 +12,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, literal)
+                                              SymWord, ite)
 import qualified Data.SBV.String             as SBVS
 -- import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
@@ -46,8 +47,8 @@ import           Pact.Analyze.Util
 
 evalIntAddTime
   :: Analyzer m
-  => TermOf m Time
-  -> TermOf m Integer
+  => TermOf m 'TyTime
+  -> TermOf m 'TyInteger
   -> m (S Time)
 evalIntAddTime timeT secsT = do
   time <- eval timeT
@@ -58,8 +59,8 @@ evalIntAddTime timeT secsT = do
 
 evalDecAddTime
   :: Analyzer m
-  => TermOf m Time
-  -> TermOf m Decimal
+  => TermOf m 'TyTime
+  -> TermOf m 'TyDecimal
   -> m (S Time)
 evalDecAddTime timeT secsT = do
   time <- eval timeT
@@ -72,7 +73,9 @@ evalDecAddTime timeT secsT = do
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 evalComparisonOp
-  :: (Analyzer m, SymWord a, Show a)
+  :: ( Analyzer m
+     , a' ~ Concrete a
+     , SymWord a', Show a')
   => ComparisonOp
   -> TermOf m a
   -> TermOf m a
@@ -89,10 +92,12 @@ evalComparisonOp op xT yT = do
     Neq -> x ./= y
 
 evalLogicalOp'
-  :: (Analyzer m, Boolean (S a), Show a, SymWord a)
+  :: ( Analyzer m
+     , a' ~ Concrete a
+     , Boolean (S a'), Show a', SymWord a')
   => LogicalOp
   -> [TermOf m a]
-  -> m (S a)
+  -> m (S a')
 evalLogicalOp' op terms = do
   symBools <- traverse eval terms
   case (op, symBools) of
@@ -102,7 +107,9 @@ evalLogicalOp' op terms = do
     _               -> throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 evalEqNeq
-  :: (Analyzer m, SymWord a, Show a)
+  :: ( Analyzer m
+     , a' ~ Concrete a
+     , SymWord a', Show a')
   => EqNeq
   -> TermOf m a
   -> TermOf m a
@@ -117,8 +124,8 @@ evalEqNeq op xT yT = do
 evalObjectEqNeq
   :: Analyzer m
   => EqNeq
-  -> TermOf m Object
-  -> TermOf m Object
+  -> TermOf m 'TyObject
+  -> TermOf m 'TyObject
   -> m (S Bool)
 evalObjectEqNeq op xT yT = do
   x <- evalO xT
@@ -128,8 +135,10 @@ evalObjectEqNeq op xT yT = do
     Neq' -> x ./= y
 
 evalCore
-  :: (Analyzer m, SymWord a, Show (Core (TermOf m) a))
-  => Core (TermOf m) a -> m (S a)
+  :: ( Analyzer m
+     , a' ~ Concrete a
+     , SymWord a', Show (Core (TermOf m) a))
+  => Core (TermOf m) a -> m (S a')
 evalCore (Lit a)                           = pure (literalS a)
 evalCore (Sym s)                           = pure s
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
@@ -151,12 +160,12 @@ evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =
   error "literal object can't be an argument to evalCore"
-evalCore (StringContains needle haystack) = do
-  needle'   <- eval needle
-  haystack' <- eval haystack
-  pure $ sansProv $ _sSbv needle' `SBVS.isInfixOf` _sSbv haystack'
+-- evalCore (StringContains needle haystack) = do
+--   needle'   <- eval needle
+--   haystack' <- eval haystack
+--   pure $ sansProv $ _sSbv needle' `SBVS.isInfixOf` _sSbv haystack'
 evalCore (ListEqNeq op (ESimple tyA a) (ESimple tyB b)) =
-  case typeEq tyA tyB of
+  case singEq tyA tyB of
     Nothing   -> error "TODO"
     Just Refl -> evalEqNeq op a b
 evalCore (Var vid name) = do
@@ -169,18 +178,21 @@ evalCore (Var vid name) = do
 evalCore x = error $ "no case for: " ++ show x
 
 evalCoreL
-  :: (Analyzer m, SymWord a)
-  => Core (TermOf m) [a] -> m (SList a)
+  :: ( Analyzer m
+     , a' ~ Concrete a
+     , SymWord a')
+  => Core (TermOf m) ('TyList a) -> m (S [a'])
 evalCoreL (LiteralList xs) = do
-  vals <- traverse (fmap _sSbv . eval) xs
-  pure $ SList (fromIntegral (length xs)) vals
+  -- vals <- traverse (fmap _sSbv . eval) xs
+  undefined
+  -- pure $ SList (fromIntegral (length xs)) vals
   -- sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
 -- evalCoreL (ListDrop n list) = do
 --   n'    <- eval n
 --   list' <- eval list
 --   pure $ sansProv $ _sSbv n' `SBVL.drop` _sSbv list'
-evalCoreL ListReverse{} = undefined
-evalCoreL ListSort{} = undefined
+-- evalCoreL ListReverse{} = undefined
+-- evalCoreL ListSort{} = undefined
 -- evalCoreL (ListTake n list) = do
 --   n'    <- eval n
 --   list' <- eval list
@@ -189,8 +201,8 @@ evalCoreL ListSort{} = undefined
 evalObjAt
   :: (Analyzer m, SymWord a)
   => Schema
-  -> TermOf m String
-  -> TermOf m Object
+  -> TermOf m 'TyStr
+  -> TermOf m 'TyObject
   -> EType
   -> m (S a)
 evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
@@ -236,8 +248,8 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
 evalObjAtO
   :: forall m
    . Analyzer m
-  => TermOf m String
-  -> TermOf m Object
+  => TermOf m 'TyStr
+  -> TermOf m 'TyObject
   -> m Object
 evalObjAtO colNameT objT = do
     obj@(Object fields) <- evalO objT
@@ -257,7 +269,7 @@ evalObjAtO colNameT objT = do
 
 evalCoreO
   :: Analyzer m
-  => Core (TermOf m) Object -> m Object
+  => Core (TermOf m) 'TyObject -> m Object
 evalCoreO (LiteralObject obj) = Object <$> traverse evalExistential obj
 evalCoreO (ObjAt _schema colNameT objT _retType) = evalObjAtO colNameT objT
 evalCoreO (ObjectMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
@@ -281,9 +293,9 @@ evalExistential = \case
   ESimple ty prop -> do
     prop' <- eval prop
     pure (EType ty, mkAVal prop')
-  EList ty prop -> do
-    SList len prop' <- evalL prop
-    pure (EListType ty, mkAList len prop')
+  -- EList ty prop -> do
+  --   SList len prop' <- evalL prop
+  --   pure (EListType ty, mkAList len prop')
   EObject ty prop -> do
     prop' <- evalO prop
     pure (EObjectTy ty, AnObj prop')

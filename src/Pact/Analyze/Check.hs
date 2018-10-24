@@ -409,7 +409,7 @@ moduleTables modules (_mod, modRefs) = do
               expInvariant  = model' ^? ix "invariant"
           exps <- collectExps "invariants" expInvariants expInvariant
           runExpParserOver exps $
-            flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
+            flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
 
     pure $ Table tabName schema invariants
 

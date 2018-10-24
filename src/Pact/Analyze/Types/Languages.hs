@@ -17,6 +17,7 @@
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
+  , (:*<:)(inject', project')
   , EInvariant
   , EProp
   , ETerm
@@ -104,6 +105,10 @@ pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
 
+class (sub :: * -> *) :*<: (sup :: Ty -> *) where
+  inject'  :: sub (Concrete a) -> sup a
+  project' :: sup a            -> Maybe (sub (Concrete a))
+
 -- | Core terms.
 --
 -- These are the expressions shared by all three languages ('Prop',
@@ -125,7 +130,7 @@ pattern Inj a <- (project -> Just a) where
 data Core (t :: Ty -> *) (a :: Ty) where
   Lit :: Concrete a -> Core t a
   -- | Injects a symbolic value into the language
-  Sym :: S a -> Core t a
+  Sym :: S (Concrete a) -> Core t a
 
   -- | Refers to a function argument, universally/existentially-quantified
   -- variable, or column
@@ -206,8 +211,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
 
--- deriving instance Eq a   => Eq   (Core Prop a)
-instance Eq (Core Prop a) where
+deriving instance Eq (Concrete a) => Eq (Core Prop a)
 
 -- instance Eq (Core Prop Object) where
 -- instance Eq (Core Prop Integer) where
@@ -226,7 +230,7 @@ instance Eq (Core Prop a) where
 -- instance Eq (Core Prop [KeySet]) where
 -- instance Eq (Core Prop [Any]) where
 
-instance Show (Core Prop a) where
+deriving instance Show (Concrete a) => Show (Core Prop a)
 
 instance
   ( UserShow (Concrete a)
@@ -392,9 +396,9 @@ instance UserShow (Concrete a) => UserShow (Prop a) where
     PropSpecific p -> userShowsPrec d p
     CoreProp     p -> userShowsPrec d p
 
-instance S :<: Prop where
-  inject = CoreProp . Sym
-  project = \case
+instance S :*<: Prop where
+  inject' = CoreProp . Sym
+  project' = \case
     CoreProp (Sym a) -> Just a
     _                -> Nothing
 
@@ -511,9 +515,9 @@ instance Numerical Invariant :<: Invariant where
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
-instance S :<: Invariant where
-  inject = CoreInvariant . Sym
-  project = \case
+instance S :*<: Invariant where
+  inject' = CoreInvariant . Sym
+  project' = \case
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
 
@@ -626,9 +630,9 @@ deriving instance Show (Concrete a) => Show (Core Term a)
 deriving instance Eq   (Concrete a) => Eq   (Term a)
 deriving instance Show (Concrete a) => Show (Term a)
 
-instance S :<: Term where
-  inject = CoreTerm . Sym
-  project = \case
+instance S :*<: Term where
+  inject' = CoreTerm . Sym
+  project' = \case
     CoreTerm (Sym a) -> Just a
     _                -> Nothing
 
