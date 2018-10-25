@@ -14,6 +14,7 @@
 
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
@@ -72,7 +73,7 @@ import           Pact.Analyze.Util
 #define EQ_EXISTENTIAL(tm)                                \
 instance Eq (Existential tm) where                        \
   ESimple sa ia == ESimple sb ib = case singEq sa sb of { \
-    Just Refl -> ia == ib;                                \
+    Just Refl -> liftC @Eq (singMkEq sa) (ia == ib);      \
     Nothing   -> False};                                  \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
@@ -81,12 +82,12 @@ instance Eq (Existential tm) where                        \
 instance Show (Existential tm) where {                                         \
   showsPrec d e = showParen (d > 10) $ case e of                               \
     ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
-      . showsPrec 11 inv;                                                      \
+      . liftC @Show (singMkShow ty) (showsPrec 11 inv);                                                      \
     EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
       . showsPrec 11 obj; };                                                   \
 instance UserShow (Existential tm) where                                       \
   userShowsPrec d e = case e of                                                \
-    ESimple _ty a -> userShowsPrec d a;                                        \
+    ESimple ty a  -> liftC @UserShow (singMkUserShow ty) (userShowsPrec d a);     \
     EObject _ty a -> userShowsPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
@@ -211,25 +212,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
 
-deriving instance Eq (Concrete a) => Eq (Core Prop a)
-
--- instance Eq (Core Prop Object) where
--- instance Eq (Core Prop Integer) where
--- instance Eq (Core Prop Bool) where
--- instance Eq (Core Prop String) where
--- instance Eq (Core Prop Time) where
--- instance Eq (Core Prop Decimal) where
--- instance Eq (Core Prop KeySet) where
--- instance Eq (Core Prop Any) where
-
--- instance Eq (Core Prop [Integer]) where
--- instance Eq (Core Prop [Bool]) where
--- instance Eq (Core Prop [String]) where
--- instance Eq (Core Prop [Time]) where
--- instance Eq (Core Prop [Decimal]) where
--- instance Eq (Core Prop [KeySet]) where
--- instance Eq (Core Prop [Any]) where
-
+deriving instance Eq   (Concrete a) => Eq   (Core Prop a)
 deriving instance Show (Concrete a) => Show (Core Prop a)
 
 instance
@@ -349,23 +332,8 @@ data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
 
+deriving instance Eq   (Concrete a) => Eq   (Prop a)
 deriving instance Show (Concrete a) => Show (Prop a)
-
-deriving instance Eq (Concrete a) => Eq (Prop a)
-
--- deriving instance         Eq (Prop 'TyObject)
--- deriving instance         Eq (Prop 'TyInteger)
--- deriving instance         Eq (Prop 'TyBool)
--- deriving instance         Eq (Prop 'TyStr)
--- deriving instance         Eq (Prop 'TyTime)
--- deriving instance         Eq (Prop 'TyDecimal)
--- deriving instance         Eq (Prop 'TyKeySet)
--- deriving instance         Eq (Prop 'TyAny)
-
-
--- deriving instance Eq a => Eq (Prop ('TyList a))
--- deriving instance         Eq (Prop TableName)
--- deriving instance         Eq (Prop ColumnName)
 
 instance UserShow (Concrete a) => UserShow (PropSpecific a) where
   userShowsPrec _d = \case

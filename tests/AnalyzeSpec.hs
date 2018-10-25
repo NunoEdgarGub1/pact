@@ -181,12 +181,14 @@ expectFalsified code = do
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
   res <- runIO $ runCheck (wrap code) check
-  it (show check) $ handlePositiveTestResult res
+  -- it (show check) $ handlePositiveTestResult res
+  it "passes" $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
   res <- runIO $ runCheck (wrap code) check
-  it (show check) $ res `shouldSatisfy` isJust
+  -- it (show check) $ res `shouldSatisfy` isJust
+  it "passes" $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
 intConserves (TableName tn) (ColumnName cn)

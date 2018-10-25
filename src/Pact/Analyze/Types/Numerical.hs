@@ -12,10 +12,12 @@
 {-# LANGUAGE ConstraintKinds            #-}
 
 {-# LANGUAGE DataKinds               #-}
+{-# LANGUAGE Rank2Types               #-}
 
 {-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 module Pact.Analyze.Types.Numerical where
 
+import Data.Constraint (Dict(Dict))
 import Data.Semigroup ((<>))
 import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Control.Lens                (Prism')
@@ -104,17 +106,8 @@ singEq (SList a) (SList b) = apply Refl <$> singEq a b
 singEq SObject   SObject   = Just Refl
 singEq _         _         = Nothing
 
-data Dict ctxt where
-  Dict :: ctxt => Dict ctxt
-
-showish :: Dict (Show a) -> a -> String
-showish Dict = show
-
-userShowish :: Dict (UserShow a) -> a -> Text
-userShowish Dict = userShow
-
-eqish :: Dict (Eq a) -> a -> a -> Bool
-eqish Dict = (==)
+liftC :: forall c a b. Dict (c a) -> (c a => b) -> b
+liftC Dict b = b
 
 -- We model decimals as integers. The value of a decimal is the value of the
 -- integer, shifted right 255 decimal places.

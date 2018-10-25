@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module Analyze.Eval where
 
 import           Bound                    (closed)
@@ -120,7 +121,7 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
     Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
     Just False -> pure $ Left "fails"
     Just True -> case analyzeVal of
-      AVal _ sval -> case unliteral (SBVI.SBV sval) of
+      AVal _ sval -> case liftC @SBVI.SymWord (singMkSymWord ty) (unliteral (SBVI.SBV sval)) of
         Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
         Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal

@@ -384,7 +384,7 @@ maybeTranslateType' f = \case
     t <- maybeTranslateType' f a
     traceM $ "t: " ++ show t
     case t of
-      -- EType t -> trace "here1" $ pure $ EType $ SList t
+      EType t -> trace "here1" $ pure $ EType $ SList t
       _       -> trace "here2" empty
    -- traceShowId (maybeTranslateType' f (traceShowId a)) >>= \case
    --  EType t -> pure $ EListType (trace ("t: " ++ show t) t)
@@ -1041,7 +1041,7 @@ doit (ESimple ty1 x : xs) = foldr
         Nothing   -> Nothing
         Just Refl -> Just (EList ty' (LiteralList (y:ys)))
       _ -> error "impossible")
-  (Just (EList ty1 (LiteralList [x])))
+  undefined -- (Just (EList ty1 (LiteralList [x])))
   xs
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph

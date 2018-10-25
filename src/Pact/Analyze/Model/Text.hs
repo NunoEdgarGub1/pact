@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Pact.Analyze.Model.Text
   ( showModel
@@ -47,7 +48,9 @@ showTVal (ety, av) = case av of
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
     EObjectTy _           -> error "showModel: impossible object type for AVal"
-    EType (_ :: SingTy t) -> showSbv (SBVI.SBV sval :: SBV (Concrete t))
+    EType (ty :: SingTy t) -> liftC @UserShow (singMkUserShow ty) $
+      liftC @SymWord (singMkSymWord ty) $
+        showSbv (SBVI.SBV sval :: SBV (Concrete t))
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "

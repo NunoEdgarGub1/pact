@@ -248,7 +248,7 @@ doit (ESimple ty0 x : xs) = foldr
         Nothing   -> Nothing
         Just Refl -> Just (EList ty' (LiteralList (y:ys)))
       _ -> error "impossible")
-  (Just (EList ty0 (LiteralList [x])))
+  undefined -- (Just (EList ty0 (LiteralList [x])))
   xs
 
 --

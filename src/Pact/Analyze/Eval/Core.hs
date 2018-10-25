@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
@@ -167,7 +168,10 @@ evalCore LiteralObject {}                  =
 evalCore (ListEqNeq op (ESimple tyA a) (ESimple tyB b)) =
   case singEq tyA tyB of
     Nothing   -> error "TODO"
-    Just Refl -> evalEqNeq op a b
+    Just Refl -> liftC @Eq (singMkEq tyA) $
+      liftC @SymWord (singMkSymWord tyA) $
+        liftC @Show (singMkShow tyA) $
+          evalEqNeq op a b
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -290,9 +294,10 @@ evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential = \case
-  ESimple ty prop -> do
-    prop' <- eval prop
-    pure (EType ty, mkAVal prop')
+  ESimple ty prop -> liftC @Show (singMkShow ty) $
+    liftC @SymWord (singMkSymWord ty) $ do
+      prop' <- eval prop
+      pure (EType ty, mkAVal prop')
   -- EList ty prop -> do
   --   SList len prop' <- evalL prop
   --   pure (EListType ty, mkAList len prop')

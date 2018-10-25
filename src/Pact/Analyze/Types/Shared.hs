@@ -19,6 +19,7 @@
 
 module Pact.Analyze.Types.Shared where
 
+import Data.Constraint (Dict(Dict))
 import           Control.Lens                 (At (at), Index, Iso, Iso',
                                                IxValue, Ixed (ix), Lens',
                                                Prism', both, from, iso, lens,
@@ -108,10 +109,10 @@ instance Mergeable a => Mergeable (Located a) where
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
 data Existential (tm :: Ty -> *) where
-  ESimple :: SimpleType (Concrete a) => SingTy a -> tm a           -> Existential tm
+  ESimple :: SingTy a -> tm a           -> Existential tm
   -- TODO: combine with ESimple?
-  EList   :: SimpleType (Concrete a) => SingTy a -> tm ('TyList a) -> Existential tm
-  EObject ::                            Schema   -> tm 'TyObject   -> Existential tm
+  EList   :: SingTy a -> tm ('TyList a) -> Existential tm
+  EObject :: Schema   -> tm 'TyObject   -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
@@ -579,7 +580,7 @@ data QKind = QType | QAny
 type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a, Typeable a)
 
 data Quantifiable :: QKind -> * where
-  EType     :: SimpleType (Concrete a) => SingTy a  -> Quantifiable q
+  EType     :: SingTy a  -> Quantifiable q
   -- EListType :: SingTy a  -> Quantifiable q
   EObjectTy :: Schema    -> Quantifiable q
   QTable    ::              Quantifiable 'QAny
@@ -706,6 +707,74 @@ singConcrete = \case
   SAny     -> Proxy
   SList _  -> Proxy
   SObject  -> Proxy
+
+singMkEq :: SingTy a -> Dict (Eq (Concrete a))
+singMkEq = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  SList a  -> case singMkEq a of
+    Dict -> Dict
+  SObject  -> Dict
+
+singMkShow :: SingTy a -> Dict (Show (Concrete a))
+singMkShow = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  SList a  -> case singMkShow a of
+    Dict -> Dict
+  SObject  -> Dict
+
+singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
+singMkSMTValue = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  -- TODO
+  -- SList a  -> case singMkSMTValue a of
+  --   Dict -> Dict
+  -- SObject  -> Dict
+
+singMkUserShow :: SingTy a -> Dict (UserShow (Concrete a))
+singMkUserShow = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  -- TODO
+  -- SList a  -> case singMkUserShow a of
+  --   Dict -> Dict
+  SObject  -> Dict
+
+singMkSymWord :: SingTy a -> Dict (SymWord (Concrete a))
+singMkSymWord = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  -- TODO
+  -- SList a  -> case singMkSymWord a of
+  --   Dict -> Dict
+  -- SObject  -> Dict
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }

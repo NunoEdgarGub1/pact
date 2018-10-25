@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module AnalyzeProperties where
 
 import           Control.Monad               ((<=<))
@@ -55,7 +56,8 @@ testDualEvaluation etm@(ESimple ty _tm) gState = do
 
       -- compare results
       case singEq ty' ty'' of
-        Just Refl -> sval' === pactSval
+        Just Refl -> liftC @Eq (singMkEq ty') $ liftC @Show (singMkShow ty') $
+          sval' === pactSval
         Nothing   -> EType ty' === EType ty'' -- this'll fail
 testDualEvaluation EObject{} _ = do
   footnote "can't property test evaluation of objects"
