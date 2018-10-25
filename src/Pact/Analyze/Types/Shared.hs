@@ -58,7 +58,6 @@ import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (Float)
-import Data.Proxy
 
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
@@ -695,18 +694,6 @@ type family Concrete (a :: Ty) where
   Concrete 'TyAny      = Any
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
-
-singConcrete :: SingTy ty -> Proxy (Concrete ty)
-singConcrete = \case
-  SInteger -> Proxy
-  SBool    -> Proxy
-  SStr     -> Proxy
-  STime    -> Proxy
-  SDecimal -> Proxy
-  SKeySet  -> Proxy
-  SAny     -> Proxy
-  SList _  -> Proxy
-  SObject  -> Proxy
 
 singMkEq :: SingTy a -> Dict (Eq (Concrete a))
 singMkEq = \case
